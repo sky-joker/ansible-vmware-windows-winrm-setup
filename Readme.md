@@ -1,5 +1,7 @@
 # Ansible VMware Windows WinRM setup
 
+[![](https://img.shields.io/badge/license-MIT-brightgreen.svg)](https://github.com/sky-joker/ansible-vmware-windows-winrm-setup/blob/master/LICENSE.txt)
+
 This Playbook can do the following:
 
 * Create certificate for WinRM

@@ -146,7 +146,7 @@ ok: [windows01]
 PLAY RECAP **************************************************************************************************************************************************************************************
 localhost                  : ok=13   changed=5    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
 windows01                  : ok=2    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
-windows02                  : ok=2    changed=0    unreachable=0    failed=0    s
+windows02                  : ok=2    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
 ```
 
 The powershell created for server certificate and certificate import is saved as follows.

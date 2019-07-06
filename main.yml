@@ -1,0 +1,158 @@
+---
+- name: Generate a server certificate for WinRM
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Create for powershell script save directory.
+      file:
+        path: "{{ root_dir }}/powershell"
+        state: directory
+
+    - name: Create for certificate save directory.
+      file:
+        path: "{{ root_dir }}/{{ item.common_name }}"
+        state: directory
+      loop: "{{ server_certificate_parameters }}"
+
+    - name: Generate an OpenSSL private key. 
+      openssl_privatekey:
+        path: "{{ root_dir }}/{{ item.common_name }}/{{ item.common_name }}.key"
+        passphrase: "{{ item.private_key_password }}"
+        cipher: "{{ item.private_key_chipher }}"
+        size: "{{ item.private_key_size }}"
+      loop: "{{ server_certificate_parameters }}"
+
+    - name: Generate an OpenSSL certificate signing request.
+      openssl_csr:
+        path: "{{ root_dir }}/{{ item.common_name}}/{{ item.common_name }}.csr"
+        privatekey_passphrase: "{{ item.private_key_password }}"
+        privatekey_path: "{{ root_dir }}/{{ item.common_name }}/{{ item.common_name }}.key"
+        common_name: "{{ item.common_name }}"
+        key_usage:
+          - digitalSignature
+          - keyEncipherment
+        extended_key_usage:
+          - clientAuth
+          - serverAuth
+      loop: "{{ server_certificate_parameters }}"
+
+    - name: Generate a self signed OpenSSL certificate.
+      openssl_certificate:
+        path: "{{ root_dir }}/{{ item.common_name }}/{{ item.common_name }}.crt"
+        privatekey_passphrase: "{{ item.private_key_password }}"
+        privatekey_path: "{{ root_dir }}/{{ item.common_name }}/{{ item.common_name }}.key"
+        csr_path: "{{ root_dir }}/{{ item.common_name }}/{{ item.common_name }}.csr"
+        provider: selfsigned
+        selfsigned_not_after: "{{ certificate_term }}"
+        ownca_not_after: "{{ ca_certificate_term }}"
+      loop: "{{ server_certificate_parameters }}"
+
+    - name: Generate PKCS12 file.
+      openssl_pkcs12:
+        friendly_name: "{{ item.friendly_name }}"
+        action: export
+        passphrase: "{{ item.pfx_password }}"
+        privatekey_passphrase: "{{ item.private_key_password }}"
+        path: "{{ root_dir }}/{{ item.common_name }}/{{ item.common_name }}.pfx"
+        privatekey_path: "{{ root_dir }}/{{ item.common_name }}/{{ item.common_name }}.key"
+        certificate_path: "{{ root_dir }}/{{ item.common_name }}/{{ item.common_name }}.crt"
+        state: present
+      loop: "{{ server_certificate_parameters }}"
+
+    - name: Generate script(ps1) to import PKCS12.
+      template:
+        src: templates/import_winrm_certificate.j2
+        dest: "{{ root_dir }}/powershell/{{ item.common_name }}.ps1"
+      loop: "{{ server_certificate_parameters }}"
+
+    - name: Wait vmware tools.
+      vmware_guest_tools_wait:
+        hostname: "{{ hostname }}"
+        username: "{{ username }}"
+        password: "{{ password }}"
+        validate_certs: no
+        name: "{{ item.vm_name }}"
+      loop: "{{ server_certificate_parameters }}"
+
+    - name: Copy pfx file to vm.
+      shell: |
+        ./vmware-guest-file-operation.py \
+            -vc {{ hostname }} \
+            -p "{{ password }}" \
+            -tvm {{ item.vm_name }} \
+            -gu {{ item.vm_username }} \
+            -gp {{ item.vm_password }} \
+            upload -upth {{ root_dir }}/{{ item.common_name }}/{{ item.common_name }}.pfx -spth "{{ windows_save_path }}\{{ item.common_name}}.pfx"
+      loop: "{{ server_certificate_parameters }}"
+
+    - name: Copy powershell script to vm.
+      vmware_guest_file_operation:
+        hostname: "{{ hostname }}"
+        username: "{{ username }}"
+        password: "{{ password }}"
+        validate_certs: no
+        datacenter: "{{ datacenter }}"
+        vm_id: "{{ item.vm_name }}"
+        vm_username: "{{ item.vm_username }}"
+        vm_password: "{{ item.vm_password }}"
+        copy:
+          src: "{{ root_dir }}/powershell/{{ item.common_name }}.ps1"
+          dest: "{{ windows_save_path }}\\{{ item.common_name }}.ps1"
+      loop: "{{ server_certificate_parameters }}"
+
+    - name: Enable WinRM HTTPS.
+      vmware_vm_shell:
+        hostname: "{{ hostname }}"
+        username: "{{ username }}"
+        password: "{{ password }}"
+        validate_certs: no
+        datacenter: "{{ datacenter }}"
+        vm_id: "{{ item.vm_name }}"
+        vm_username: "{{ item.vm_username }}"
+        vm_password: "{{ item.vm_password }}"
+        vm_shell: "{{ powershell_absolute_path }}"
+        vm_shell_args: "-File {{ windows_save_path }}\\{{ item.common_name }}.ps1"
+      loop: "{{ server_certificate_parameters }}"
+
+    - name: Delete the powershell script file.
+      vmware_vm_shell:
+        hostname: "{{ hostname }}"
+        username: "{{ username }}"
+        password: "{{ password }}"
+        validate_certs: no
+        datacenter: "{{ datacenter }}"
+        vm_id: "{{ item.vm_name }}"
+        vm_username: "{{ item.vm_username }}"
+        vm_password: "{{ item.vm_password }}"
+        vm_shell: "{{ powershell_absolute_path }}"
+        vm_shell_args: "-Command \"Remove-Item {{ windows_save_path }}\\{{ item.common_name }}.ps1"
+      loop: "{{ server_certificate_parameters }}"
+
+    - name: Delete the pfx file.
+      vmware_vm_shell:
+        hostname: "{{ hostname }}"
+        username: "{{ username }}"
+        password: "{{ password }}"
+        validate_certs: no
+        datacenter: "{{ datacenter }}"
+        vm_id: "{{ item.vm_name }}"
+        vm_username: "{{ item.vm_username }}"
+        vm_password: "{{ item.vm_password }}"
+        vm_shell: "{{ powershell_absolute_path }}"
+        vm_shell_args: "-Command \"Remove-Item {{ windows_save_path }}\\{{ item.common_name }}.pfx"
+      loop: "{{ server_certificate_parameters }}"
+
+- name: Connection check for WinRM
+  hosts: windows
+  gather_facts: no
+  tasks:
+    - name: Wait for listening on 5986 port.
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ ansible_port }}"
+        delay: 5
+        timeout: 300
+      delegate_to: localhost
+
+    - name: Win Ping.
+      win_ping:

@@ -1,0 +1,23 @@
+# certificate directory.
+root_dir: certificate
+
+# windows
+windows_save_path: C:\Users\Administrator\Desktop
+powershell_absolute_path: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+
+# Parameters to sign a certificate.
+certificate_term: +365d
+ca_certificate_term: +365d
+
+# Parameters to csr files.
+server_certificate_parameters:
+  - common_name: WINDOWS01
+    private_key_password: password
+    private_key_chipher: des3
+    private_key_size: 2048
+    friendly_name: ansible
+    pfx_password: password
+    vm_name: Windows01
+    vm_username: Administrator
+    vm_password: secret
+

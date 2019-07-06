@@ -1,0 +1,5 @@
+---
+hostname: vCenter IP
+username: administrator@vsphere.local
+password: secret
+datacenter: DC

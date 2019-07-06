@@ -2,6 +2,9 @@
 - name: Generate a server certificate for WinRM
   hosts: localhost
   gather_facts: no
+  vars_files:
+    - vars/certificate_parameters.yml
+    - vars/vmware_parameters.yml
   tasks:
     - name: Create for powershell script save directory.
       file:
